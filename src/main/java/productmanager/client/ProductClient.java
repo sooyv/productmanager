@@ -33,7 +33,7 @@ public class ProductClient {
 
         scanner = new Scanner(System.in);
 
-        list();
+        list(); // HTTP => 'GET'
         while(true) {
             showMenu();
         }
@@ -193,6 +193,5 @@ public class ProductClient {
                 );
             }
         }
-
     }
 }

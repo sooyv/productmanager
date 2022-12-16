@@ -4,15 +4,14 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 import productmanager.Product;
 import productmanager.RequestCode;
+import productmanager.db.ProductRepository;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.util.Iterator;
 import java.util.List;
-import java.util.Vector;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -20,14 +19,13 @@ public class ProductServer {
     // 필드
     private ServerSocket serverSocket;
     private ExecutorService threadPool;
+    private ProductRepository db;
     private List<Product> products;
     private int sequence = 0;
 
-    //
     public static void main(String[] args) {
         // 서버 객체 생성
         ProductServer productServer = new ProductServer();
-
         try {
             productServer.start();
         } catch (IOException e) {
@@ -40,12 +38,12 @@ public class ProductServer {
         // 소켓에 포트 바인딩 (전화기에 번호부여)
         serverSocket = new ServerSocket(50001);
         threadPool = Executors.newFixedThreadPool(100);
-        products = new Vector<>();
 
-        // test용 dummy 데이터
-        products.add(
-                new Product(sequence++, "삼다수", 1000, 20)
-        );
+        // DB Conn
+        db = new ProductRepository();
+        // DB에서 다 가져와서
+        // products에 채우기
+        products = db.getProducts();
 
         System.out.println("[서버] 시작됨");
 
@@ -75,8 +73,8 @@ public class ProductServer {
         }
 
         // 요청 (클라이언트 -> 서버)
-            // 데이터(JSON)를 읽고 어떤 요청인지 확인
-            // dis을 통해 데이터를 읽음
+        // 데이터(JSON)를 읽고 어떤 요청인지 확인
+        // dis을 통해 데이터를 읽음
         // String -> 객체화 시켜서 사용
         // {
         //      menu: 메뉴 번호,
@@ -142,22 +140,19 @@ public class ProductServer {
         // create
         // 클라이언트가 상품을 만들어달라고 요청
         // 만든 상품은 서버에 저장됨
+
+        // HTTP => 'POST'
         public void create(JSONObject request) throws IOException {
             // data 안에 상품이름, 가격, 재고수량
-            JSONObject data = request.getJSONObject("data");
-            Product product = new Product();
-            product.setNo(sequence++);
-            product.setName(data.getString("name"));
-            product.setPrice(data.getInt("price"));
-            product.setStock(data.getInt("stock"));
-            
-            products.add(product);
-            
+
+            db.add(request);
+            products = db.getProducts();
+
             // response 보내기
             // 1. JSON만들기
             JSONObject response = new JSONObject();
             response.put("status", "success");
-            response.put("data", "");
+            response.put("data", new JSONObject());
             // 2. 직렬화하기(문자열화)
             dos.writeUTF(response.toString());
             dos.flush();
@@ -166,16 +161,15 @@ public class ProductServer {
         public void update(JSONObject request) throws IOException {
             // 받은 JSON파일을 파싱해서 읽기
             JSONObject data = request.getJSONObject("data");
-            // 해당하는 상품정보 업데이트
-            int no = data.getInt("no");
-            for(int i = 0; i < products.size(); i++) {
-                Product product = products.get(i);
-                if(product.getNo() == no) {
-                    product.setName(data.getString("name"));
-                    product.setPrice(data.getInt("price"));
-                    product.setStock(data.getInt("stock"));
-                }
-            }
+            Product product = new Product();
+            product.setName(data.getString("name"));
+            product.setPrice(data.getInt("price"));
+            product.setStock(data.getInt("stock"));
+            product.setNo(data.getInt("no"));
+
+            db.update(product);
+            products = db.getProducts();
+
             // 클라이언트한테 response
             JSONObject response = new JSONObject();
             response.put("status", "success");
@@ -188,14 +182,9 @@ public class ProductServer {
             // 데이터 읽고
             JSONObject data = request.getJSONObject("data");
             int no = data.getInt("no");
-            // 해당 no 이 products 안에 있는지 확인하고 삭제
-            Iterator<Product> iterator = products.iterator();
-            while(iterator.hasNext()) {
-                Product product = iterator.next();
-                if (product.getNo() == no) {
-                    iterator.remove();
-                }
-            }
+
+            db.delete(no);
+            products = db.getProducts();
 
             // response
             JSONObject response = new JSONObject();
